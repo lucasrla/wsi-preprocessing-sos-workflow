@@ -1,0 +1,120 @@
+[global]
+cfg = CONFIG
+
+import os
+local = cfg['localhost']
+cfg['hosts'][local]['paths']['home'] = os.getcwd()
+
+print("CONFIG", cfg)
+
+input_dir = cfg["fs"]["slides_dirname"]
+data_dir = cfg["fs"]["data_dirname"]
+tiles_dir = cfg["fs"]["tiles_dirname"]
+
+glob_slides = cfg["slides"]["glob_pattern"]
+mpp = cfg["slides"]["mpp"]
+
+tile_dims = cfg["tiles"]["dimensions"]
+tile_fmt = cfg["tiles"]["file_format"]
+
+remote_host_name = cfg["remote"]["host_name"]
+project_name = cfg["project_name"]
+
+
+[slides_info]
+output: remote(f"{data_dir}/slides_mpp_otsu.csv")
+task: queue=f"{remote_host_name}"
+python: expand=True
+    import wsi_preprocessing as pp
+    slides = pp.list_slides("{input_dir}", glob_pattern="{glob_slides}")
+    pp.save_slides_mpp_otsu(slides, "{_output}")
+
+
+[tiling]
+input: remote(f"{data_dir}/slides_mpp_otsu.csv")
+output: remote(f"{data_dir}/tiles.csv")
+task: queue=f"{remote_host_name}"
+python: expand=True
+    import wsi_preprocessing as pp
+    pp.run_tiling("{_input}", 
+                  "{_output}", 
+                  mpp="{mpp}", 
+                  tile_dims="{tile_dims}", 
+                  file_format="{tile_fmt}", 
+                  output_dir="{tiles_dir}")
+
+
+[filters_info]
+input: remote(f"{data_dir}/slides_mpp_otsu.csv")
+output: remote(f"{data_dir}/tiles_filters.csv")
+depends: sos_step("tiling")
+task: queue=f"{remote_host_name}"
+python: expand=True
+    import wsi_preprocessing as pp
+    pp.calculate_filters("{_input}", "{tiles_dir}", "{_output}")
+
+
+[slides_from_s3]
+task: queue=f"{remote_host_name}"
+
+input_bucket = cfg["s3_buckets"]["input"]
+
+sh: expand=True
+    test ! -d {input_dir} && mkdir -p {input_dir}
+    aws s3 sync s3://{input_bucket} {input_dir}
+
+
+[metadata_to_s3_101]
+input: remote(f"{data_dir}/slides_mpp_otsu.csv")
+
+metadata_bucket = cfg["s3_buckets"]["metadata"]
+fname = f"{data_dir}/{project_name}-slides_mpp_otsu.csv"
+
+task: queue=f"{remote_host_name}"
+sh: expand=True
+    gzip -c {_input} > {fname}.gz
+    aws s3 cp {fname}.gz s3://{metadata_bucket}
+
+
+[metadata_to_s3_102]
+input: remote(f"{data_dir}/tiles_filters.csv")
+
+metadata_bucket = cfg["s3_buckets"]["metadata"]
+fname = f"{data_dir}/{project_name}-tiles_filters.csv"
+
+task: queue=f"{remote_host_name}"
+sh: expand=True
+    gzip -c {_input} > {fname}.gz
+    aws s3 cp {fname}.gz s3://{metadata_bucket}
+
+
+[tiles_to_s3]
+task: queue=f"{remote_host_name}"
+
+output_bucket = cfg["s3_buckets"]["output"]
+
+sh: expand=True
+    aws s3 sync {tiles_dir} s3://{output_bucket}
+
+
+[install_dependencies]
+task: queue=f"{remote_host_name}"
+
+sh: expand=True
+    conda install --channel conda-forge libvips numpy pandas pyvips -y
+    pip install git+https://github.com/lucasrla/wsi-preprocessing.git
+
+
+[default]
+sos_run("install_dependencies")
+
+if "s3_buckets" in cfg.keys() and "input" in cfg["s3_buckets"].keys():
+    sos_run("slides_from_s3")
+
+sos_run("slides_info + tiling + filters_info")
+
+if "s3_buckets" in cfg.keys() and "metadata" in cfg["s3_buckets"].keys():
+    sos_run("metadata_to_s3")
+
+if "s3_buckets" in cfg.keys() and "output" in cfg["s3_buckets"].keys():
+    sos_run("tiles_to_s3")

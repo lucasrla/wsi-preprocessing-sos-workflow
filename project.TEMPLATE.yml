@@ -1,0 +1,28 @@
+project_name: "PROJ_NAME"
+
+tiles:
+  dimensions: "224" # in px, the size of input images to your neural network
+  file_format: ".png" # it could be ".jpg" as well
+  fsize_threshold: "50" # in kb, any tile below threshold this will be ignored
+  # for a 224x224 png file, anything < 50 kb is almost certainly not tissue,
+  # it is either background or gibberish
+
+slides:
+  mpp: "0.5" # in microns per pixel, the resolution targeted for each slide
+  glob_pattern: "*.svs"
+
+# optional
+# if used, we will look for a host called "ec2" on your ~/.sos/hosts.yml
+# if it does not exist, then we will run "ec2_setup" and launch a new instance
+remote:
+  host_name: "ec2"
+
+# s3: AVALIAR
+#   bucket_input: "" # if files are on s3
+#   bucket_output: "" # if files should go to s3
+
+fs:
+  tiles_dirname: "output/tiles/"
+  data_dirname: "output/metadata/"
+  # "/Users/lucas/dev/ac4/wsi-tile-cleanup/data/images/wsi/"
+  slides_dirname: "input/"

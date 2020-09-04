@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "wsi-preprocessing-sos-workflow"
+version = "0.1.0"
+description = "A fast pipeline to preprocess pathology whole-slide images (WSI) for deep learning"
+authors = ["Lucas Amaro <lucasrla@users.noreply.github.com>"]
+license = "GPL-3.0-or-later"
+readme = "README.md"
+repository = "https://github.com/lucasrla/wsi-preprocessing-sos-workflow"
+
+[tool.poetry.dependencies]
+python = "^3.6.1"
+sos = "^0.21.14"
+wsi-preprocessing = {git = "https://github.com/lucasrla/wsi-preprocessing"}
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
